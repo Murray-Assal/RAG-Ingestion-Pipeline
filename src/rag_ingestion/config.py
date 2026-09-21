@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated
 
 from pydantic import Field, field_validator
@@ -19,6 +20,7 @@ class Settings(BaseSettings):
     github_token: str | None = None
     github_repositories: Annotated[list[str], NoDecode] = Field(default_factory=list)
     github_api_url: str = "https://api.github.com"
+    local_docs_path: Path | None = None
     database_url: str = "postgresql://rag:rag@localhost:5432/rag"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dimension: int = Field(default=384, ge=1)
@@ -26,6 +28,11 @@ class Settings(BaseSettings):
     chunk_max_tokens: int = Field(default=350, ge=32)
     chunk_overlap_tokens: int = Field(default=40, ge=0)
     top_k: int = Field(default=5, ge=1, le=50)
+    similarity_threshold: float = Field(default=0.35, ge=-1.0, le=1.0)
+    answer_generation_enabled: bool = False
+    answer_generation_model: str = "llama3.2"
+    answer_generation_url: str = "http://host.docker.internal:11434"
+    answer_generation_timeout_seconds: float = Field(default=30.0, gt=0)
     request_timeout_seconds: float = Field(default=30.0, gt=0)
     max_document_bytes: int = Field(default=1_000_000, ge=1_024)
 

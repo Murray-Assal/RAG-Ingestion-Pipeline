@@ -32,3 +32,12 @@ def test_long_prose_splits_at_bounded_word_or_sentence_boundaries() -> None:
     assert len(chunks) > 1
     assert all(chunk.header_path == ("Notes",) for chunk in chunks)
     assert all(estimate_tokens(chunk.content) <= 40 for chunk in chunks)
+
+
+def test_chunk_metadata_preserves_nested_header_path_and_position() -> None:
+    document = make_document("# Install\n\nOverview.\n\n## Prerequisites\n\nPython is required.")
+
+    chunks = MarkdownChunker(max_tokens=32, overlap_tokens=4).chunk(document)
+
+    assert [chunk.ordinal for chunk in chunks] == [0, 1]
+    assert [chunk.header_path for chunk in chunks] == [("Install",), ("Install", "Prerequisites")]

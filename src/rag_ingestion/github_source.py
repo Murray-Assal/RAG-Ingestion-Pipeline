@@ -11,8 +11,7 @@ import httpx
 
 from rag_ingestion.config import Settings
 from rag_ingestion.models import SourceDocument
-
-_DOCUMENT_EXTENSIONS = (".md", ".mdx", ".rst")
+from rag_ingestion.source_connector import is_document_path
 
 
 class GitHubSourceError(RuntimeError):
@@ -82,7 +81,7 @@ class GitHubDocumentSource:
                 if isinstance(item, dict)
                 and item.get("type") == "blob"
                 and isinstance(item.get("path"), str)
-                and self._is_document_path(item["path"])
+                and is_document_path(item["path"])
             )
             documents.extend(self._fetch_document(repository, branch, path) for path in paths)
         return documents
@@ -125,15 +124,6 @@ class GitHubDocumentSource:
             content_hash=hashlib.sha256(raw).hexdigest(),
             source_sha=payload.get("sha") if isinstance(payload.get("sha"), str) else None,
         )
-
-    @staticmethod
-    def _is_document_path(path: str) -> bool:
-        normalized = path.lower().lstrip("./")
-        filename = normalized.rsplit("/", 1)[-1]
-        return (
-            filename.startswith("readme.")
-            or normalized.startswith(("docs/", "doc/", "documentation/"))
-        ) and normalized.endswith(_DOCUMENT_EXTENSIONS)
 
     def _get_json(self, path: str, params: dict[str, object] | None = None) -> object:
         try:

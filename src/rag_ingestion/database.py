@@ -76,6 +76,21 @@ class PgVectorStore:
             CREATE INDEX IF NOT EXISTS chunks_document_idx ON chunks (document_id);
             CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw_idx
                 ON chunks USING hnsw (embedding vector_cosine_ops);
+
+            CREATE TABLE IF NOT EXISTS ingestion_runs (
+                id UUID PRIMARY KEY,
+                started_at TIMESTAMPTZ NOT NULL,
+                finished_at TIMESTAMPTZ,
+                status TEXT NOT NULL CHECK (status IN ('running', 'success', 'failed')),
+                docs_added INTEGER NOT NULL DEFAULT 0,
+                docs_updated INTEGER NOT NULL DEFAULT 0,
+                docs_deleted INTEGER NOT NULL DEFAULT 0,
+                chunks_written INTEGER NOT NULL DEFAULT 0,
+                error_message TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS ingestion_runs_started_at_idx
+                ON ingestion_runs (started_at DESC);
         """
         with self._connection() as connection, connection.cursor() as cursor:
             cursor.execute(statements)
@@ -89,6 +104,23 @@ class PgVectorStore:
             row = cursor.fetchone()
         return DocumentRecord(**row) if row else None
 
+    def list_active_documents(self, repositories: Sequence[str]) -> list[DocumentRecord]:
+        """Read the current state snapshot used by the change detector."""
+
+        if not repositories:
+            return []
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id::text, source_url, content_hash
+                FROM documents
+                WHERE repository = ANY(%s) AND is_active = TRUE
+                """,
+                (list(repositories),),
+            )
+            rows = cursor.fetchall()
+        return [DocumentRecord(**row) for row in rows]
+
     def mark_seen(self, source_url: str, source_sha: str | None) -> None:
         with self._connection() as connection, connection.cursor() as cursor:
             cursor.execute(
@@ -99,6 +131,27 @@ class PgVectorStore:
                 """,
                 (source_sha, source_url),
             )
+
+    def mark_documents_deleted(self, documents: Sequence[DocumentRecord]) -> int:
+        """Deactivate missing documents and remove their vectors in one transaction."""
+
+        source_urls = [document.source_url for document in documents]
+        if not source_urls:
+            return 0
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE documents
+                SET is_active = FALSE, updated_at = NOW()
+                WHERE source_url = ANY(%s) AND is_active = TRUE
+                RETURNING id
+                """,
+                (source_urls,),
+            )
+            document_ids = [row["id"] for row in cursor.fetchall()]
+            if document_ids:
+                cursor.execute("DELETE FROM chunks WHERE document_id = ANY(%s)", (document_ids,))
+            return len(document_ids)
 
     def replace_document(
         self,
@@ -192,6 +245,72 @@ class PgVectorStore:
                 cursor.execute("DELETE FROM documents WHERE repository = ANY(%s)", (list(repositories),))
             return cursor.rowcount
 
+    def start_ingestion_run(self) -> str:
+        """Create an auditable run record before orchestration writes its final counters."""
+
+        run_id = uuid.uuid4()
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO ingestion_runs (id, started_at, status)
+                VALUES (%s, NOW(), 'running')
+                """,
+                (run_id,),
+            )
+        return str(run_id)
+
+    def finish_ingestion_run(
+        self,
+        run_id: str,
+        *,
+        docs_added: int,
+        docs_updated: int,
+        docs_deleted: int,
+        chunks_written: int,
+    ) -> None:
+        """Persist successful run metrics for Airflow and operational audit queries."""
+
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE ingestion_runs
+                SET finished_at = NOW(), status = 'success', docs_added = %s,
+                    docs_updated = %s, docs_deleted = %s, chunks_written = %s,
+                    error_message = NULL
+                WHERE id = %s
+                """,
+                (docs_added, docs_updated, docs_deleted, chunks_written, uuid.UUID(run_id)),
+            )
+
+    def fail_ingestion_run(self, run_id: str, error_message: str) -> None:
+        """Persist a concise failure reason while preserving whatever data existed before the run."""
+
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE ingestion_runs
+                SET finished_at = NOW(), status = 'failed', error_message = %s
+                WHERE id = %s
+                """,
+                (error_message[:4_000], uuid.UUID(run_id)),
+            )
+
+    def get_ingestion_run(self, run_id: str) -> dict[str, object] | None:
+        """Read an ingestion-run record for task-level observability and tests."""
+
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    id::text AS id, started_at, finished_at, status, docs_added,
+                    docs_updated, docs_deleted, chunks_written, error_message
+                FROM ingestion_runs
+                WHERE id = %s
+                """,
+                (uuid.UUID(run_id),),
+            )
+            return cursor.fetchone()
+
     def search(self, query_embedding: Sequence[float], limit: int) -> list[SearchMatch]:
         """Return active chunks nearest to the normalized query embedding by cosine distance."""
 
@@ -227,6 +346,21 @@ class PgVectorStore:
             )
             for row in rows
         ]
+
+    def active_chunk_count(self) -> int:
+        """Return the active index size so the API can distinguish empty from irrelevant results."""
+
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM chunks AS c
+                JOIN documents AS d ON d.id = c.document_id
+                WHERE d.is_active = TRUE
+                """
+            )
+            row = cursor.fetchone()
+        return int(row["count"]) if row else 0
 
     def healthcheck(self) -> bool:
         """Return whether Postgres is reachable and can execute a trivial query."""

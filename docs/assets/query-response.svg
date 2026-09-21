@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="690" viewBox="0 0 1200 690" role="img" aria-labelledby="title desc">
+  <title id="title">Example query response from the RAG Ingestion Pipeline</title>
+  <desc id="desc">A dark terminal showing a POST query and a grounded chunk with source metadata.</desc>
+  <rect width="1200" height="690" fill="#0b1020"/>
+  <rect x="42" y="38" width="1116" height="614" rx="16" fill="#111827" stroke="#344155" stroke-width="2"/>
+  <circle cx="78" cy="74" r="8" fill="#fb7185"/><circle cx="104" cy="74" r="8" fill="#fbbf24"/><circle cx="130" cy="74" r="8" fill="#4ade80"/>
+  <text x="162" y="80" fill="#cbd5e1" font-family="Consolas, monospace" font-size="20">POST /query — grounded documentation result</text>
+  <g font-family="Consolas, monospace" font-size="22">
+    <text x="78" y="134" fill="#86efac">$</text><text x="104" y="134" fill="#e2e8f0">curl -s -X POST http://localhost:8000/query -H "content-type: application/json"</text>
+    <text x="104" y="168" fill="#e2e8f0">-d '{"question":"How do I refresh the documentation index?","top_k":1}'</text>
+    <text x="78" y="226" fill="#93c5fd">{</text>
+    <text x="108" y="260" fill="#c4b5fd">"question"</text><text x="250" y="260" fill="#e2e8f0">: </text><text x="276" y="260" fill="#fde68a">"How do I refresh the documentation index?",</text>
+    <text x="108" y="294" fill="#c4b5fd">"results"</text><text x="250" y="294" fill="#e2e8f0">: [</text>
+    <text x="138" y="328" fill="#93c5fd">{</text>
+    <text x="168" y="362" fill="#c4b5fd">"content"</text><text x="310" y="362" fill="#e2e8f0">: </text><text x="336" y="362" fill="#fde68a">"Run `rag-ingest` to refresh the index.",</text>
+    <text x="168" y="396" fill="#c4b5fd">"path"</text><text x="310" y="396" fill="#e2e8f0">: </text><text x="336" y="396" fill="#fde68a">"README.md",</text>
+    <text x="168" y="430" fill="#c4b5fd">"header_path"</text><text x="390" y="430" fill="#e2e8f0">: [</text><text x="418" y="430" fill="#fde68a">"Usage"</text><text x="512" y="430" fill="#e2e8f0">],</text>
+    <text x="168" y="464" fill="#c4b5fd">"score"</text><text x="310" y="464" fill="#e2e8f0">: </text><text x="336" y="464" fill="#86efac">0.95,</text>
+    <text x="168" y="498" fill="#c4b5fd">"source_url"</text><text x="390" y="498" fill="#e2e8f0">: </text><text x="416" y="498" fill="#67e8f9">"https://github.com/.../README.md"</text>
+    <text x="138" y="532" fill="#93c5fd">}</text><text x="162" y="532" fill="#e2e8f0">],</text>
+    <text x="108" y="566" fill="#c4b5fd">"answer_status"</text><text x="390" y="566" fill="#e2e8f0">: </text><text x="416" y="566" fill="#fde68a">"disabled"</text>
+    <text x="78" y="600" fill="#93c5fd">}</text>
+  </g>
+</svg>

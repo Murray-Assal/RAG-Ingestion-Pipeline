@@ -9,12 +9,13 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Protocol
 
+from rag_ingestion.change_detector import ChangeDetector
 from rag_ingestion.chunking import MarkdownChunker
 from rag_ingestion.config import Settings, get_settings
 from rag_ingestion.database import PgVectorStore
 from rag_ingestion.embeddings import EmbeddingProvider, SentenceTransformerEmbedder
-from rag_ingestion.github_source import GitHubDocumentSource
-from rag_ingestion.models import IngestionSummary, SourceDocument
+from rag_ingestion.models import DocumentRecord, IngestionSummary, SourceDocument
+from rag_ingestion.source_connector import build_document_source
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +29,13 @@ class DocumentSource(Protocol):
 class IngestionStore(Protocol):
     def ensure_schema(self) -> None: ...
 
-    def get_document(self, source_url: str): ...
+    def list_active_documents(self, repositories: Sequence[str]) -> list[DocumentRecord]: ...
 
     def mark_seen(self, source_url: str, source_sha: str | None) -> None: ...
 
     def replace_document(self, document, chunks, embeddings, embedding_model: str) -> None: ...
 
-    def delete_missing_documents(self, repositories: Sequence[str], seen_urls: Sequence[str]) -> int: ...
+    def mark_documents_deleted(self, documents: Sequence[DocumentRecord]) -> int: ...
 
 
 class IngestionPipeline:
@@ -66,27 +67,42 @@ class IngestionPipeline:
         if not resolved_repositories:
             raise RuntimeError("No repositories found for the configured GitHub owner")
 
-        self.store.ensure_schema()
         documents = self.source.crawl(resolved_repositories)
-        seen_urls = [document.source_url for document in documents]
+        # Fetch the full snapshot before any data write, so an unreachable source
+        # cannot corrupt the previously indexed state.
+        self.store.ensure_schema()
+        change_set = ChangeDetector().detect(
+            documents,
+            self.store.list_active_documents(resolved_repositories),
+        )
         indexed_documents = 0
-        skipped_documents = 0
+        skipped_documents = len(change_set.unchanged)
         embedded_chunks = 0
 
-        for document in documents:
-            existing = self.store.get_document(document.source_url)
-            if existing and existing.content_hash == document.content_hash:
-                self.store.mark_seen(document.source_url, document.source_sha)
-                skipped_documents += 1
-                continue
-            chunks = self.chunker.chunk(document)
-            vectors = self.embedder.embed([chunk.content for chunk in chunks])
-            self.store.replace_document(document, chunks, vectors, self.settings.embedding_model)
-            indexed_documents += 1
-            embedded_chunks += len(chunks)
-            logger.info("Indexed %s chunks from %s/%s", len(chunks), document.repository, document.path)
+        for document in change_set.unchanged:
+            self.store.mark_seen(document.source_url, document.source_sha)
 
-        deleted_documents = self.store.delete_missing_documents(resolved_repositories, seen_urls)
+        for document in change_set.changed:
+            chunks = self.chunker.chunk(document)
+            embedding_result = self.embedder.embed_resilient([chunk.content for chunk in chunks])
+            indexed_chunks = [chunks[index] for index, _ in embedding_result.vectors]
+            vectors = [vector for _, vector in embedding_result.vectors]
+            if embedding_result.failed_indices:
+                logger.error(
+                    "Skipped %s failed chunk(s) from %s/%s",
+                    len(embedding_result.failed_indices),
+                    document.repository,
+                    document.path,
+                )
+            if chunks and not indexed_chunks:
+                logger.error("No chunks from %s/%s could be embedded; document will retry next run", document.repository, document.path)
+                continue
+            self.store.replace_document(document, indexed_chunks, vectors, self.settings.embedding_model)
+            indexed_documents += 1
+            embedded_chunks += len(indexed_chunks)
+            logger.info("Indexed %s chunks from %s/%s", len(indexed_chunks), document.repository, document.path)
+
+        deleted_documents = self.store.mark_documents_deleted(change_set.deleted)
         return IngestionSummary(
             repositories=resolved_repositories,
             discovered_documents=len(documents),
@@ -113,7 +129,7 @@ def build_pipeline(settings: Settings | None = None) -> IngestionPipeline:
         )
     return IngestionPipeline(
         settings=resolved_settings,
-        source=GitHubDocumentSource(resolved_settings),
+        source=build_document_source(resolved_settings),
         store=PgVectorStore(resolved_settings.database_url, resolved_settings.embedding_dimension),
         embedder=embedder,
     )

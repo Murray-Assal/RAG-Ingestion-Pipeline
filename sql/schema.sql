@@ -1,5 +1,5 @@
--- Reference schema for the default all-MiniLM-L6-v2 (384-dimensional) embedding model.
--- The application creates this idempotently at startup; keep this file for inspection/migrations.
+-- Initial Postgres/pgvector migration for the default all-MiniLM-L6-v2
+-- (384-dimensional) embedding model.
 CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE IF NOT EXISTS documents (
@@ -33,3 +33,18 @@ CREATE TABLE IF NOT EXISTS chunks (
 
 CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw_idx
     ON chunks USING hnsw (embedding vector_cosine_ops);
+
+CREATE TABLE IF NOT EXISTS ingestion_runs (
+    id UUID PRIMARY KEY,
+    started_at TIMESTAMPTZ NOT NULL,
+    finished_at TIMESTAMPTZ,
+    status TEXT NOT NULL CHECK (status IN ('running', 'success', 'failed')),
+    docs_added INTEGER NOT NULL DEFAULT 0,
+    docs_updated INTEGER NOT NULL DEFAULT 0,
+    docs_deleted INTEGER NOT NULL DEFAULT 0,
+    chunks_written INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT
+);
+
+CREATE INDEX IF NOT EXISTS ingestion_runs_started_at_idx
+    ON ingestion_runs (started_at DESC);

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from rag_ingestion.config import Settings
+from rag_ingestion.embeddings import EmbeddingBatchResult
 from rag_ingestion.ingestion import IngestionPipeline
 from rag_ingestion.models import DocumentRecord, SourceDocument
 
@@ -30,8 +31,9 @@ class FakeStore:
     def ensure_schema(self) -> None:
         self.ensure_calls += 1
 
-    def get_document(self, source_url: str) -> DocumentRecord | None:
-        return self.documents.get(source_url)
+    def list_active_documents(self, repositories: Sequence[str]) -> list[DocumentRecord]:
+        assert list(repositories) == ["demo"]
+        return list(self.documents.values())
 
     def mark_seen(self, source_url: str, source_sha: str | None) -> None:
         self.seen.append(source_url)
@@ -41,8 +43,8 @@ class FakeStore:
         self.replacements += 1
         self.documents[document.source_url] = DocumentRecord("doc-id", document.source_url, document.content_hash)
 
-    def delete_missing_documents(self, repositories: Sequence[str], seen_urls: Sequence[str]) -> int:
-        self.deleted = (list(repositories), list(seen_urls))
+    def mark_documents_deleted(self, documents: Sequence[DocumentRecord]) -> int:
+        self.deleted = (["demo"], [document.source_url for document in documents])
         return 0
 
 
@@ -55,6 +57,10 @@ class FakeEmbedder:
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         self.calls.append(list(texts))
         return [[0.1, 0.2, 0.3] for _ in texts]
+
+    def embed_resilient(self, texts: Sequence[str]) -> EmbeddingBatchResult:
+        vectors = self.embed(texts)
+        return EmbeddingBatchResult(tuple(enumerate(vectors)), ())
 
 
 def test_second_snapshot_skips_unchanged_document_without_embedding_again() -> None:
@@ -86,4 +92,4 @@ def test_second_snapshot_skips_unchanged_document_without_embedding_again() -> N
     assert len(embedder.calls) == 1
     assert store.replacements == 1
     assert store.seen == [document.source_url]
-    assert store.deleted == (["demo"], [document.source_url])
+    assert store.deleted == (["demo"], [])

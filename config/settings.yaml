@@ -1,0 +1,35 @@
+# Runtime defaults. Secrets belong in environment variables, never this file.
+source:
+  github_owner: Murray-Assal
+  repositories: [] # Empty means all eligible repositories for the owner.
+  local_docs_path: null
+
+chunking:
+  max_tokens: 350
+  overlap_tokens: 40
+
+embedding:
+  model: sentence-transformers/all-MiniLM-L6-v2
+  dimension: 384
+  batch_size: 32
+
+retrieval:
+  top_k: 5
+  similarity_threshold: 0.35
+
+answer_generation:
+  # Optional local Ollama synthesis. Retrieval works without this component.
+  enabled: false
+  model: llama3.2
+  url: http://host.docker.internal:11434
+  timeout_seconds: 30
+
+orchestration:
+  schedule: "0 3 * * *"
+  retries: 2
+  retry_delay_minutes: 5
+  retry_exponential_backoff: true
+
+failure_alerts:
+  # The webhook itself stays in the environment, never in this repository.
+  slack_webhook_env: SLACK_WEBHOOK_URL

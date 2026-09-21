@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">RAG ingestion to query terminal demo</title>
+  <desc id="desc">A terminal walkthrough that starts services, indexes documentation, and queries the API.</desc>
+  <rect width="1200" height="760" fill="#0b1020"/>
+  <rect x="36" y="30" width="1128" height="688" rx="16" fill="#111827" stroke="#344155" stroke-width="2"/>
+  <circle cx="72" cy="66" r="8" fill="#fb7185"/><circle cx="98" cy="66" r="8" fill="#fbbf24"/><circle cx="124" cy="66" r="8" fill="#4ade80"/>
+  <g font-family="Consolas, monospace" font-size="22">
+    <text x="72" y="124" fill="#86efac">$</text><text x="100" y="124" fill="#e2e8f0">docker compose up --build -d postgres api</text>
+    <text x="100" y="158" fill="#94a3b8">✔ postgres healthy     ✔ api started</text>
+    <line x1="72" y1="184" x2="1128" y2="184" stroke="#334155"/>
+    <text x="72" y="230" fill="#86efac">$</text><text x="100" y="230" fill="#e2e8f0">docker compose run --rm api rag-ingest</text>
+    <text x="100" y="264" fill="#94a3b8">Indexed 4 chunks from demo/README.md</text>
+    <text x="100" y="298" fill="#94a3b8">Indexed 3 chunks from demo/docs/setup.md</text>
+    <text x="100" y="332" fill="#67e8f9">{ "indexed_documents": 2, "embedded_chunks": 7, "deleted_documents": 0 }</text>
+    <line x1="72" y1="360" x2="1128" y2="360" stroke="#334155"/>
+    <text x="72" y="406" fill="#86efac">$</text><text x="100" y="406" fill="#e2e8f0">curl -s -X POST localhost:8000/query ...</text>
+    <text x="100" y="448" fill="#c4b5fd">"question"</text><text x="240" y="448" fill="#e2e8f0">: </text><text x="266" y="448" fill="#fde68a">"How do I refresh the index?"</text>
+    <text x="100" y="486" fill="#c4b5fd">"path"</text><text x="240" y="486" fill="#e2e8f0">: </text><text x="266" y="486" fill="#fde68a">"README.md"</text>
+    <text x="100" y="524" fill="#c4b5fd">"header_path"</text><text x="338" y="524" fill="#e2e8f0">: [</text><text x="366" y="524" fill="#fde68a">"Usage"</text><text x="462" y="524" fill="#e2e8f0">]</text>
+    <text x="100" y="562" fill="#c4b5fd">"score"</text><text x="240" y="562" fill="#e2e8f0">: </text><text x="266" y="562" fill="#86efac">0.95</text>
+    <line x1="72" y1="594" x2="1128" y2="594" stroke="#334155"/>
+    <text x="72" y="644" fill="#86efac">✓</text><text x="100" y="644" fill="#e2e8f0">Next scheduled run skips unchanged documents.</text>
+  </g>
+</svg>

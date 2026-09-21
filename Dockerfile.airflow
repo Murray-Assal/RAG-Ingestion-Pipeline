@@ -4,6 +4,7 @@ USER root
 WORKDIR /opt/airflow/project
 COPY pyproject.toml README.md ./
 COPY src ./src
+COPY config ./config
 RUN pip install --no-cache-dir --no-deps . && \
     pip install --no-cache-dir httpx "psycopg[binary]>=3.2,<4.0" "pgvector>=0.3.6,<1.0" \
       "pydantic-settings>=2.6,<3.0" "sentence-transformers>=3.3,<6.0" psycopg2-binary
